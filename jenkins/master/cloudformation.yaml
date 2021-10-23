@@ -323,17 +323,6 @@ Resources:
       TTL: 300
       Type: CNAME
 
-  RecordSet:
-    Type: AWS::Route53::RecordSet
-    Properties:
-      HostedZoneId: !Ref HostedZoneId
-      Name: !Ref DomainName
-      ResourceRecords:
-        - !GetAtt CloudFront.DomainName
-      TTL: !Ref DnsTtl
-      Type: CNAME
-
-
   TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
