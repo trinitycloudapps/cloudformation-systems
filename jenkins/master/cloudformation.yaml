@@ -172,7 +172,8 @@ Resources:
             Principal:
               Service: ecs-tasks.amazonaws.com
       Policies:
-        - PolicyDocument:
+        - PolicyName: root
+          PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
@@ -180,7 +181,8 @@ Resources:
                   - elasticfilesystem:ClientMount
                   - elasticfilesystem:ClientWrite
                 Resource: !GetAtt EfsFileSystem.Arn
-        - PolicyDocument:
+        - PolicyName: create-jenkins-agents
+          PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Action:
