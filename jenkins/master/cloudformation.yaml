@@ -2,6 +2,16 @@ AWSTemplateFormatVersion: 2010-09-09
 
 Parameters:
 
+  Cpu:
+    AllowedValues:
+      - 256
+      - 512
+      - 1024
+      - 2048
+      - 4096
+    Default: 512
+    Type: String
+
   Host:
     Type: String
 
@@ -12,9 +22,24 @@ Parameters:
   LoadBalancerListenerArn:
     Type: String
 
+  Memory:
+    AllowedValues:
+      - 512
+      - 1024
+      - 2048
+      - 4096
+      - 8192
+      - 16384
+      - 30720
+    Default: 1024
+    Type: String
+
   Name:
     Default: jenkins
     Type: String
+
+  PrivateSubnetList:
+    Type: CommaDelimitedList
 
   Sequence:
     Default: 1
@@ -22,9 +47,6 @@ Parameters:
 
   Stage:
     Type: String
-
-  PrivateSubnetList:
-    Type: CommaDelimitedList
 
   VpcCidr:
     Type: String
@@ -78,15 +100,6 @@ Resources:
   EcsTaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      Family: !Sub jenkins-task
-      Cpu: 512
-      Memory: 1024
-      NetworkMode: awsvpc
-      TaskRoleArn: !Ref JenkinsRole
-      ExecutionRoleArn: !Ref JenkinsExecutionRole
-      RequiresCompatibilities:
-        - FARGATE
-        - EC2
       ContainerDefinitions:
         - Name: jenkins
           Image: jenkins/jenkins:lts
@@ -101,14 +114,23 @@ Resources:
               awslogs-group: !Ref CloudwatchLogsGroup
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: jenkins
+      Cpu: !Ref Cpu
+      ExecutionRoleArn: !Ref JenkinsExecutionRole
+      Family: !Sub jenkins-task
+      Memory: !Ref Memory
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+        - EC2
+      TaskRoleArn: !Ref JenkinsRole
       Volumes:
         - Name: jenkins-home
           EFSVolumeConfiguration:
-            FilesystemId: !Ref FileSystemResource
-            TransitEncryption: ENABLED
             AuthorizationConfig:
-              AccessPointId: !Ref AccessPointResource
+              AccessPointId: !Ref EfsAccessPointResource
               IAM: ENABLED
+            FilesystemId: !Ref EfsFileSystem
+            TransitEncryption: ENABLED
 
   EfsAccessPointResource:
     Type: AWS::EFS::AccessPoint
@@ -132,18 +154,18 @@ Resources:
         - Key: Name
           Value: jenkins-home
 
-  EfsMountTargetResource1:
+  EfsMountTarget1:
     Type: AWS::EFS::MountTarget
     Properties:
-      FileSystemId: !Ref FileSystemResource
+      FileSystemId: !Ref EfsFileSystem
       SubnetId: !Select [ 0, !Ref PrivateSubnetList ]
       SecurityGroups:
         - !GetAtt EfsSecurityGroup.GroupId
 
-  EfsMountTargetResource2:
+  EfsMountTarget2:
     Type: AWS::EFS::MountTarget
     Properties:
-      FileSystemId: !Ref FileSystemResource
+      FileSystemId: !Ref EfsFileSystem
       SubnetId: !Select [ 1, !Ref PrivateSubnetList ]
       SecurityGroups:
         - !GetAtt EfsSecurityGroup.GroupId
