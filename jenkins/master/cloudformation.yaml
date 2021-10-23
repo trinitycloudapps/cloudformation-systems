@@ -15,6 +15,14 @@ Parameters:
   Host:
     Type: String
 
+  JenkinsWebPort:
+    Default: 8080
+    Type: String
+
+  JnlpPort:
+    Default: 50000
+    Type: String
+
   ListenerPriority:
     Default: 1
     Type: String
@@ -101,9 +109,9 @@ Resources:
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED
-          Subnets:
-            - !GetAtt VPCStack.Outputs.PrivateSubnet1
-            - !GetAtt VPCStack.Outputs.PrivateSubnet2
+          Subnets: !Ref PrivateSubnetList
+#            - !GetAtt VPCStack.Outputs.PrivateSubnet1
+#            - !GetAtt VPCStack.Outputs.PrivateSubnet2
           SecurityGroups:
             - !GetAtt JenkinsSecurityGroup.GroupId
       LoadBalancers:
@@ -263,6 +271,22 @@ Resources:
           IpProtocol: tcp
           FromPort: 2049
           ToPort: 2049
+
+  JenkinsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub jenkins-${Stage}-${Sequence}-security-group
+      GroupDescription: Security group for Jenkins
+      SecurityGroupIngress:
+        - CidrIp: !Ref VpcCidr
+          FromPort: !Ref JenkinsWebPort
+          IpProtocol: tcp
+          ToPort: !Ref JenkinsWebPort
+        - CidrIp: !Ref VpcCidr
+          FromPort: JnlpPort
+          IpProtocol: tcp
+          ToPort: JnlpPort
+      VpcId: !Ref VpcId
 
   LoadBalancerListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
