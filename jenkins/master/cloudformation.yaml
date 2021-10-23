@@ -324,7 +324,6 @@ Resources:
       Type: CNAME
 
   RecordSet:
-    Condition: CreateRecordSet
     Type: AWS::Route53::RecordSet
     Properties:
       HostedZoneId: !Ref HostedZoneId
