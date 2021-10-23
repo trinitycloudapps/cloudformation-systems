@@ -3,7 +3,6 @@ AWSTemplateFormatVersion: 2010-09-09
 Parameters:
 
   Host:
-    Default: none
     Type: String
 
   ListenerPriority:
@@ -11,7 +10,6 @@ Parameters:
     Type: String
 
   LoadBalancerListenerArn:
-    Default: none
     Type: String
 
   Name:
@@ -25,7 +23,7 @@ Parameters:
   Stage:
     Type: String
 
-  SubnetList:
+  PrivateSubnetList:
     Type: CommaDelimitedList
 
   VpcCidr:
@@ -45,6 +43,11 @@ Resources:
     Properties:
       LogGroupName: !Join ['-', [ECSLogGroup, !Ref 'AWS::StackName']]
       RetentionInDays: 14
+
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: jenkins-cluster
 
   EcsService:
     Type: AWS::ECS::Service
@@ -107,17 +110,6 @@ Resources:
               AccessPointId: !Ref AccessPointResource
               IAM: ENABLED
 
-  EfsSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      VpcId: !Ref Vpc
-      GroupDescription: Enable EFS access via port 2049
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 2049
-          ToPort: 2049
-          CidrIp: !Ref VpcCidr
-
   EfsAccessPointResource:
     Type: AWS::EFS::AccessPoint
     Properties:
@@ -144,17 +136,28 @@ Resources:
     Type: AWS::EFS::MountTarget
     Properties:
       FileSystemId: !Ref FileSystemResource
-      SubnetId: !Select [ 0, !Ref SubnetList ]
+      SubnetId: !Select [ 0, !Ref PrivateSubnetList ]
       SecurityGroups:
-        - !GetAtt EFSSecurityGroup.GroupId
+        - !GetAtt EfsSecurityGroup.GroupId
 
   EfsMountTargetResource2:
     Type: AWS::EFS::MountTarget
     Properties:
       FileSystemId: !Ref FileSystemResource
-      SubnetId: !Select [ 1, !Ref SubnetList ]
+      SubnetId: !Select [ 1, !Ref PrivateSubnetList ]
       SecurityGroups:
-        - !GetAtt EFSSecurityGroup.GroupId
+        - !GetAtt EfsSecurityGroup.GroupId
+
+  EfsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VpcId
+      GroupDescription: Jenkins Efs
+      SecurityGroupIngress:
+        - CidrIp: !Ref VpcCidr
+          IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
 
   LoadBalancerListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
