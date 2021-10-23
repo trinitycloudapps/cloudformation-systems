@@ -66,10 +66,24 @@ Resources:
       LogGroupName: !Join ['-', [ECSLogGroup, !Ref 'AWS::StackName']]
       RetentionInDays: 14
 
-  ECSCluster:
+  EcsCluster:
     Type: AWS::ECS::Cluster
     Properties:
       ClusterName: jenkins-cluster
+
+  EcsExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub jenkins-${Stage}-${Sequence}-execution-role
+      Path: /
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+      ManagedPolicyArns:
+        - arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
 
   EcsService:
     Type: AWS::ECS::Service
@@ -115,14 +129,14 @@ Resources:
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: jenkins
       Cpu: !Ref Cpu
-      ExecutionRoleArn: !Ref JenkinsExecutionRole
+      ExecutionRoleArn: !Ref EcsExecutionRole
       Family: !Sub jenkins-task
       Memory: !Ref Memory
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
         - EC2
-      TaskRoleArn: !Ref JenkinsRole
+      TaskRoleArn: !Ref EcsTaskRole
       Volumes:
         - Name: jenkins-home
           EFSVolumeConfiguration:
@@ -131,6 +145,75 @@ Resources:
               IAM: ENABLED
             FilesystemId: !Ref EfsFileSystem
             TransitEncryption: ENABLED
+
+  EcsTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: jenkins-role
+      Path: /
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - elasticfilesystem:ClientMount
+                  - elasticfilesystem:ClientWrite
+                Resource: !GetAtt EfsFileSystem.Arn
+        - PolicyName: create-jenkins-agents
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Action:
+                  - ecs:RegisterTaskDefinition
+                  - ecs:ListClusters
+                  - ecs:DescribeContainerInstances
+                  - ecs:ListTaskDefinitions
+                  - ecs:DescribeTaskDefinition
+                  - ecs:DeregisterTaskDefinition
+                Effect: Allow
+                Resource: '*'
+              - Action:
+                  - ecs:ListContainerInstances
+                Effect: Allow
+                Resource:
+                  - !GetAtt EcsCluster.Arn
+              - Action:
+                  - ecs:RunTask
+                Effect: Allow
+                Condition:
+                  ArnEquals:
+                    ecs:cluster:
+                      - !GetAtt EcsCluster.Arn
+                Resource: !Sub arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/*
+              - Action:
+                  - ecs:StopTask
+                Effect: Allow
+                Condition:
+                  ArnEquals:
+                    ecs:cluster:
+                      - !GetAtt EcsCluster.Arn
+                Resource: !Sub arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task/*
+              - Action:
+                  - ecs:DescribeTasks
+                Effect: Allow
+                Condition:
+                  ArnEquals:
+                    ecs:cluster:
+                      - !GetAtt EcsCluster.Arn
+                Resource: !Sub arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task/*
+              - Action:
+                  - iam:GetRole
+                  - iam:PassRole
+                Effect: Allow
+                Resource: !GetAtt EcsExecutionRole.Arn
 
   EfsAccessPointResource:
     Type: AWS::EFS::AccessPoint
