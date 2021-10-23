@@ -27,6 +27,9 @@ Parameters:
     Default: 1
     Type: String
 
+  LoadBalancerDnsName:
+    Type: String
+
   LoadBalancerListenerArn:
     Type: String
 
@@ -48,6 +51,9 @@ Parameters:
 
   PrivateSubnetList:
     Type: CommaDelimitedList
+
+  Route53HostedZone:
+    Type: String
 
   Sequence:
     Default: 1
@@ -277,6 +283,11 @@ Resources:
     Properties:
       GroupName: !Sub jenkins-${Stage}-${Sequence}-security-group
       GroupDescription: Security group for Jenkins
+      SecurityGroupEgress:
+        - CidrIp: '0.0.0.0/0'
+          FromPort: 2049
+          IpProtocol: tcp
+          ToPort: 50000
       SecurityGroupIngress:
         - CidrIp: !Ref VpcCidr
           FromPort: !Ref JenkinsWebPort
@@ -301,6 +312,28 @@ Resources:
               - !Ref Host
       ListenerArn: !Ref LoadBalancerListenerArn
       Priority: !Ref ListenerPriority
+
+  Route53RecordSet:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref Route53HostedZone
+      Name: !Ref Host
+      ResourceRecords:
+        - !Ref LoadBalancerDnsName
+      TTL: 300
+      Type: CNAME
+
+  RecordSet:
+    Condition: CreateRecordSet
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      ResourceRecords:
+        - !GetAtt CloudFront.DomainName
+      TTL: !Ref DnsTtl
+      Type: CNAME
+
 
   TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
