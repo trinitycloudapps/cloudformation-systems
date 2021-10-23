@@ -172,8 +172,7 @@ Resources:
             Principal:
               Service: ecs-tasks.amazonaws.com
       Policies:
-        - PolicyName: root
-          PolicyDocument:
+        - PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
@@ -181,20 +180,20 @@ Resources:
                   - elasticfilesystem:ClientMount
                   - elasticfilesystem:ClientWrite
                 Resource: !GetAtt EfsFileSystem.Arn
-        - PolicyName: create-jenkins-agents
-          PolicyDocument:
+        - PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Action:
-                  - ecs:RegisterTaskDefinition
-                  - ecs:ListClusters
-                  - ecs:DescribeContainerInstances
-                  - ecs:ListTaskDefinitions
-                  - ecs:DescribeTaskDefinition
                   - ecs:DeregisterTaskDefinition
+                  - ecs:DescribeContainerInstances
+                  - ecs:DescribeTaskDefinition
+                  - ecs:ListClusters
+                  - ecs:ListTaskDefinitions
+                  - ecs:RegisterTaskDefinition
                 Effect: Allow
                 Resource: '*'
               - Action:
+                  - ecs:DescribeClusters
                   - ecs:ListContainerInstances
                 Effect: Allow
                 Resource:
