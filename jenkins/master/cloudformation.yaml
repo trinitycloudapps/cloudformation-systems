@@ -283,9 +283,9 @@ Resources:
           IpProtocol: tcp
           ToPort: !Ref JenkinsWebPort
         - CidrIp: !Ref VpcCidr
-          FromPort: JnlpPort
+          FromPort: !Ref JnlpPort
           IpProtocol: tcp
-          ToPort: JnlpPort
+          ToPort: !Ref JnlpPort
       VpcId: !Ref VpcId
 
   LoadBalancerListenerRule:
