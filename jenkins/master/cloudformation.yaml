@@ -90,7 +90,7 @@ Resources:
             Type: A
           - TTL: 60
             Type: SRV
-      Name: !Ref Host
+      Name: !Sub jenkins-${Stage}-${Sequence}-discovery-service
       NamespaceId: !Ref DnsNamespace
 
   DnsNamespace:
