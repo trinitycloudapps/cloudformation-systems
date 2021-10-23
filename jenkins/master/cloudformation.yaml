@@ -163,7 +163,7 @@ Resources:
   EcsTaskRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: jenkins-role
+      RoleName: !Sub jenkins-${Stage}-${Sequence}-role
       Path: /
       AssumeRolePolicyDocument:
         Statement:
