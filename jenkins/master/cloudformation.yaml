@@ -77,7 +77,7 @@ Resources:
   CloudwatchLogsGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Join ['-', [ECSLogGroup, !Ref 'AWS::StackName']]
+      LogGroupName: !Sub systems/${Name}/master/${Stage}/${Sequence}
       RetentionInDays: 14
 
   DiscoveryService:
@@ -90,7 +90,7 @@ Resources:
             Type: A
           - TTL: 60
             Type: SRV
-      Name: !Sub jenkins-${Stage}-${Sequence}-discovery-service
+      Name: !Sub ${Name}-${Stage}-${Sequence}-discovery-service
       NamespaceId: !Ref DnsNamespace
 
   DnsNamespace:
@@ -102,12 +102,12 @@ Resources:
   EcsCluster:
     Type: AWS::ECS::Cluster
     Properties:
-      ClusterName: jenkins-cluster
+      ClusterName: ${Name}-${Stage}-${Sequence}-ecs-cluster
 
   EcsExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub jenkins-${Stage}-${Sequence}-execution-role
+      RoleName: !Sub ${Name}-${AWS::Region}-${Stage}-${Sequence}-execution-role
       Path: /
       AssumeRolePolicyDocument:
         Statement:
@@ -130,8 +130,8 @@ Resources:
       HealthCheckGracePeriodSeconds: 300
       LaunchType: FARGATE
       LoadBalancers:
-        - ContainerName: jenkins
-          ContainerPort: 8080
+        - ContainerName: !Ref Name
+          ContainerPort: !Ref JenkinsWebPort
           TargetGroupArn: !Ref TargetGroup
       NetworkConfiguration:
         AwsvpcConfiguration:
@@ -149,10 +149,10 @@ Resources:
     Type: AWS::ECS::TaskDefinition
     Properties:
       ContainerDefinitions:
-        - Name: jenkins
+        - Name: !Ref Name
           Image: jenkins/jenkins:lts
           PortMappings:
-            - ContainerPort: 8080
+            - ContainerPort: !Ref JenkinsWebPort
             - ContainerPort: !Ref JnlpPort
           MountPoints:
             - SourceVolume: jenkins-home
@@ -184,7 +184,7 @@ Resources:
   EcsTaskRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub jenkins-${Stage}-${Sequence}-role
+      RoleName: !Sub ${Name}-${AWS::Region}-${Stage}-${Sequence}-role
       Path: /
       AssumeRolePolicyDocument:
         Statement:
@@ -271,7 +271,7 @@ Resources:
       Encrypted: true
       FileSystemTags:
         - Key: Name
-          Value: jenkins-home
+          Value: !Sub ${Name}-${Stage}-${Sequence}-efs-filesystem
 
   EfsMountTarget1:
     Type: AWS::EFS::MountTarget
@@ -292,31 +292,30 @@ Resources:
   EfsSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      VpcId: !Ref VpcId
       GroupDescription: Jenkins Efs
+      GroupName: !Sub ${Name}-${Stage}-${Sequence}-efs-security-group
       SecurityGroupIngress:
         - CidrIp: !Ref VpcCidr
           IpProtocol: tcp
           FromPort: 2049
           ToPort: 2049
-
-  JenkinsAgentSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupName: !Sub jenkins-${Stage}-${Sequence}-agent-security-group
-      GroupDescription: Security group for Jenkins agents
       VpcId: !Ref VpcId
 
-  JenkinsSecurityGroup:
+#  JenkinsAgentSecurityGroup:
+#    Type: AWS::EC2::SecurityGroup
+#    Properties:
+#      GroupDescription: Security group for Jenkins agents
+#      GroupName: !Sub ${Name}-${Stage}-${Sequence}-agent-security-group
+#      VpcId: !Ref VpcId
+
+  JenkinsMasterSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: !Sub jenkins-${Stage}-${Sequence}-mastersecurity-group
-      GroupDescription: Security group for Jenkins
+      GroupName: !Sub ${Name}-${Stage}-${Sequence}-master-security-group
+      GroupDescription: Security group for Jenkins Master
       SecurityGroupEgress:
         - CidrIp: '0.0.0.0/0'
-          FromPort: 80
           IpProtocol: tcp
-          ToPort: 50000
       SecurityGroupIngress:
         - CidrIp: !Ref VpcCidr
           FromPort: !Ref JenkinsWebPort
@@ -357,7 +356,7 @@ Resources:
     Properties:
       HealthCheckPath: /login
       Name: !Sub ${Name}-${Stage}-${Sequence}-target-group
-      Port: 8080
+      Port: !Ref JenkinsWebPort
       Protocol: HTTP
       TargetType: ip
       VpcId: !Ref VpcId
