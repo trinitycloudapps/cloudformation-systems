@@ -1,0 +1,64 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+
+  Cpu:
+    AllowedValues:
+      - 256
+      - 512
+      - 1024
+      - 2048
+      - 4096
+    Default: 512
+    Type: String
+
+  JnlpPort:
+    Default: 50000
+    Type: String
+
+  Memory:
+    AllowedValues:
+      - 512
+      - 1024
+      - 2048
+      - 4096
+      - 8192
+      - 16384
+      - 30720
+    Default: 1024
+    Type: String
+
+  Name:
+    Default: jenkins
+    Type: String
+
+  PrivateSubnetList:
+    Type: CommaDelimitedList
+
+  Sequence:
+    Default: 1
+    Type: String
+
+  Stage:
+    Type: String
+
+  VpcCidr:
+    Type: String
+
+  VpcId:
+    Type: String
+
+#Mappings:
+
+#Conditions:
+
+Resources:
+
+  AgentSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Jenkins agents
+      GroupName: !Sub ${Name}-${Stage}-${Sequence}-agent-security-group
+      VpcId: !Ref VpcId
+
+#Outputs:

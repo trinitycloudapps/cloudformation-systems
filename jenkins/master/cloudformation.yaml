@@ -74,13 +74,6 @@ Parameters:
 
 Resources:
 
-  AgentSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Security group for Jenkins agents
-      GroupName: !Sub ${Name}-${Stage}-${Sequence}-agent-security-group
-      VpcId: !Ref VpcId
-
   CloudwatchLogsGroup:
     Type: AWS::Logs::LogGroup
     Properties:
