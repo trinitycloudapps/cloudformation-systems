@@ -172,7 +172,7 @@ Resources:
               awslogs-stream-prefix: jenkins
       Cpu: !Ref Cpu
       ExecutionRoleArn: !Ref EcsExecutionRole
-      Family: !Sub jenkins-task
+      Family: !Sub ${Name}-${Stage}-${Sequence}-master-task
       Memory: !Ref Memory
       NetworkMode: awsvpc
       RequiresCompatibilities:
