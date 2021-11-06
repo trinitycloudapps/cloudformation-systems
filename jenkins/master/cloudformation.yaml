@@ -328,10 +328,6 @@ Resources:
           FromPort: !Ref JenkinsWebPort
           IpProtocol: tcp
           ToPort: !Ref JenkinsWebPort
-        - FromPort: !Ref JnlpPort
-          IpProtocol: tcp
-          SourceSecurityGroupId: !Ref AgentSecurityGroup
-          ToPort: !Ref JnlpPort
       VpcId: !Ref VpcId
 
   Route53RecordSet:
