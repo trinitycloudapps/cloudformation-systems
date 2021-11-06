@@ -12,6 +12,13 @@ Parameters:
     Default: 512
     Type: String
 
+  HasAgents:
+    AllowedValues:
+      - true
+      - false
+    Default: true
+    Type: String
+
   Host:
     Type: String
 
@@ -70,7 +77,9 @@ Parameters:
 
 #Mappings:
 
-#Conditions:
+Conditions:
+
+  HasAgents: !Equals [ !Ref HasAgents, true ]
 
 Resources:
 
@@ -81,6 +90,7 @@ Resources:
       RetentionInDays: 14
 
   DiscoveryService:
+    Condition: HasAgents
     Type: AWS::ServiceDiscovery::Service
     Properties:
       DnsConfig:
@@ -94,6 +104,7 @@ Resources:
       NamespaceId: !Ref DnsNamespace
 
   DnsNamespace:
+    Condition: HasAgents
     Type: AWS::ServiceDiscovery::PrivateDnsNamespace
     Properties:
       Name: !Ref AWS::StackName
