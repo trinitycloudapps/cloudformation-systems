@@ -138,7 +138,7 @@ Resources:
           AssignPublicIp: ENABLED
           Subnets: !Ref PrivateSubnetList
           SecurityGroups:
-            - !GetAtt JenkinsSecurityGroup.GroupId
+            - !GetAtt MasterSecurityGroup.GroupId
       PlatformVersion: 1.4.0
       ServiceRegistries:
         - RegistryArn: !GetAtt DiscoveryService.Arn
@@ -301,14 +301,14 @@ Resources:
           ToPort: 2049
       VpcId: !Ref VpcId
 
-#  JenkinsAgentSecurityGroup:
+#  AgentSecurityGroup:
 #    Type: AWS::EC2::SecurityGroup
 #    Properties:
 #      GroupDescription: Security group for Jenkins agents
 #      GroupName: !Sub ${Name}-${Stage}-${Sequence}-agent-security-group
 #      VpcId: !Ref VpcId
 
-  JenkinsMasterSecurityGroup:
+  MasterSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupName: !Sub ${Name}-${Stage}-${Sequence}-master-security-group
