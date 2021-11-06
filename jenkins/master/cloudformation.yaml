@@ -329,7 +329,7 @@ Resources:
       GroupDescription: Security group for Jenkins Master
       SecurityGroupEgress:
         - CidrIp: '0.0.0.0/0'
-          IpProtocol: tcp
+          IpProtocol: '-1'
       SecurityGroupIngress:
         - CidrIp: !Ref VpcCidr
           FromPort: !Ref JenkinsWebPort
