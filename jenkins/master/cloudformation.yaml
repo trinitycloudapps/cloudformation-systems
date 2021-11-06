@@ -2,20 +2,57 @@ AWSTemplateFormatVersion: 2010-09-09
 
 Parameters:
 
+  Cpu:
+    AllowedValues:
+      - 256
+      - 512
+      - 1024
+      - 2048
+      - 4096
+    Default: 512
+    Type: String
+
   Host:
-    Default: none
+    Type: String
+
+  JenkinsWebPort:
+    Default: 8080
+    Type: String
+
+  JnlpPort:
+    Default: 50000
     Type: String
 
   ListenerPriority:
     Default: 1
     Type: String
 
+  LoadBalancerDnsName:
+    Type: String
+
   LoadBalancerListenerArn:
-    Default: none
+    Type: String
+
+  Memory:
+    AllowedValues:
+      - 512
+      - 1024
+      - 2048
+      - 4096
+      - 8192
+      - 16384
+      - 30720
+    Default: 1024
     Type: String
 
   Name:
     Default: jenkins
+    Type: String
+
+  PrivateSubnetList:
+    Type: CommaDelimitedList
+
+  Route53HostedZone:
     Type: String
 
   Sequence:
@@ -24,9 +61,6 @@ Parameters:
 
   Stage:
     Type: String
-
-  SubnetList:
-    Type: CommaDelimitedList
 
   VpcCidr:
     Type: String
@@ -46,49 +80,80 @@ Resources:
       LogGroupName: !Join ['-', [ECSLogGroup, !Ref 'AWS::StackName']]
       RetentionInDays: 14
 
+  DiscoveryService:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      DnsConfig:
+        RoutingPolicy: MULTIVALUE
+        DnsRecords:
+          - TTL: 60
+            Type: A
+          - TTL: 60
+            Type: SRV
+      Name: !Sub jenkins-${Stage}-${Sequence}-discovery-service
+      NamespaceId: !Ref DnsNamespace
+
+  DnsNamespace:
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+    Properties:
+      Name: !Ref AWS::StackName
+      Vpc: !Ref VpcId
+
+  EcsCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: jenkins-cluster
+
+  EcsExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub jenkins-${Stage}-${Sequence}-execution-role
+      Path: /
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
   EcsService:
     Type: AWS::ECS::Service
-    DependsOn: LoadBalancerListener
+#    DependsOn: LoadBalancerListener
     Properties:
-      Cluster: !Ref ECSCluster
-      TaskDefinition: !Ref JenkinsTaskDefinition
-      DesiredCount: 1
-      HealthCheckGracePeriodSeconds: 300
-      LaunchType: FARGATE
-      PlatformVersion: 1.4.0
+      Cluster: !Ref EcsCluster
       DeploymentConfiguration:
         MinimumHealthyPercent: 0
         MaximumPercent: 100
-      NetworkConfiguration:
-        AwsvpcConfiguration:
-          AssignPublicIp: ENABLED
-          Subnets:
-            - !GetAtt VPCStack.Outputs.PrivateSubnet1
-            - !GetAtt VPCStack.Outputs.PrivateSubnet2
-          SecurityGroups:
-            - !GetAtt JenkinsSecurityGroup.GroupId
+      DesiredCount: 1
+      HealthCheckGracePeriodSeconds: 300
+      LaunchType: FARGATE
       LoadBalancers:
         - ContainerName: jenkins
           ContainerPort: 8080
-          TargetGroupArn: !Ref JenkinsTargetGroup
+          TargetGroupArn: !Ref TargetGroup
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets: !Ref PrivateSubnetList
+          SecurityGroups:
+            - !GetAtt JenkinsSecurityGroup.GroupId
+      PlatformVersion: 1.4.0
+      ServiceRegistries:
+        - RegistryArn: !GetAtt DiscoveryService.Arn
+          Port: !Ref JnlpPort
+      TaskDefinition: !Ref EcsTaskDefinition
 
   EcsTaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      Family: !Sub jenkins-task
-      Cpu: 512
-      Memory: 1024
-      NetworkMode: awsvpc
-      TaskRoleArn: !Ref JenkinsRole
-      ExecutionRoleArn: !Ref JenkinsExecutionRole
-      RequiresCompatibilities:
-        - FARGATE
-        - EC2
       ContainerDefinitions:
         - Name: jenkins
           Image: jenkins/jenkins:lts
           PortMappings:
             - ContainerPort: 8080
+            - ContainerPort: !Ref JnlpPort
           MountPoints:
             - SourceVolume: jenkins-home
               ContainerPath: /var/jenkins_home
@@ -98,25 +163,93 @@ Resources:
               awslogs-group: !Ref CloudwatchLogsGroup
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: jenkins
+      Cpu: !Ref Cpu
+      ExecutionRoleArn: !Ref EcsExecutionRole
+      Family: !Sub jenkins-task
+      Memory: !Ref Memory
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+        - EC2
+      TaskRoleArn: !Ref EcsTaskRole
       Volumes:
         - Name: jenkins-home
           EFSVolumeConfiguration:
-            FilesystemId: !Ref FileSystemResource
-            TransitEncryption: ENABLED
             AuthorizationConfig:
-              AccessPointId: !Ref AccessPointResource
+              AccessPointId: !Ref EfsAccessPointResource
               IAM: ENABLED
+            FilesystemId: !Ref EfsFileSystem
+            TransitEncryption: ENABLED
 
-  EfsSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
+  EcsTaskRole:
+    Type: AWS::IAM::Role
     Properties:
-      VpcId: !Ref Vpc
-      GroupDescription: Enable EFS access via port 2049
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 2049
-          ToPort: 2049
-          CidrIp: !Ref VpcCidr
+      RoleName: !Sub jenkins-${Stage}-${Sequence}-role
+      Path: /
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - elasticfilesystem:ClientMount
+                  - elasticfilesystem:ClientWrite
+                Resource: !GetAtt EfsFileSystem.Arn
+        - PolicyName: create-jenkins-agents
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Action:
+                  - ecs:DeregisterTaskDefinition
+                  - ecs:DescribeContainerInstances
+                  - ecs:DescribeTaskDefinition
+                  - ecs:ListClusters
+                  - ecs:ListTaskDefinitions
+                  - ecs:RegisterTaskDefinition
+                Effect: Allow
+                Resource: '*'
+              - Action:
+                  - ecs:DescribeClusters
+                  - ecs:ListContainerInstances
+                Effect: Allow
+                Resource:
+                  - !GetAtt EcsCluster.Arn
+              - Action:
+                  - ecs:RunTask
+                Effect: Allow
+                Condition:
+                  ArnEquals:
+                    ecs:cluster:
+                      - !GetAtt EcsCluster.Arn
+                Resource: !Sub arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/*
+              - Action:
+                  - ecs:StopTask
+                Effect: Allow
+                Condition:
+                  ArnEquals:
+                    ecs:cluster:
+                      - !GetAtt EcsCluster.Arn
+                Resource: !Sub arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task/*
+              - Action:
+                  - ecs:DescribeTasks
+                Effect: Allow
+                Condition:
+                  ArnEquals:
+                    ecs:cluster:
+                      - !GetAtt EcsCluster.Arn
+                Resource: !Sub arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task/*
+              - Action:
+                  - iam:GetRole
+                  - iam:PassRole
+                Effect: Allow
+                Resource: !GetAtt EcsExecutionRole.Arn
 
   EfsAccessPointResource:
     Type: AWS::EFS::AccessPoint
@@ -140,21 +273,60 @@ Resources:
         - Key: Name
           Value: jenkins-home
 
-  EfsMountTargetResource1:
+  EfsMountTarget1:
     Type: AWS::EFS::MountTarget
     Properties:
-      FileSystemId: !Ref FileSystemResource
-      SubnetId: !Select [ 0, !Ref SubnetList ]
+      FileSystemId: !Ref EfsFileSystem
+      SubnetId: !Select [ 0, !Ref PrivateSubnetList ]
       SecurityGroups:
-        - !GetAtt EFSSecurityGroup.GroupId
+        - !GetAtt EfsSecurityGroup.GroupId
 
-  EfsMountTargetResource2:
+  EfsMountTarget2:
     Type: AWS::EFS::MountTarget
     Properties:
-      FileSystemId: !Ref FileSystemResource
-      SubnetId: !Select [ 1, !Ref SubnetList ]
+      FileSystemId: !Ref EfsFileSystem
+      SubnetId: !Select [ 1, !Ref PrivateSubnetList ]
       SecurityGroups:
-        - !GetAtt EFSSecurityGroup.GroupId
+        - !GetAtt EfsSecurityGroup.GroupId
+
+  EfsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VpcId
+      GroupDescription: Jenkins Efs
+      SecurityGroupIngress:
+        - CidrIp: !Ref VpcCidr
+          IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+
+  JenkinsAgentSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub jenkins-${Stage}-${Sequence}-agent-security-group
+      GroupDescription: Security group for Jenkins agents
+      VpcId: !Ref VpcId
+
+  JenkinsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub jenkins-${Stage}-${Sequence}-mastersecurity-group
+      GroupDescription: Security group for Jenkins
+      SecurityGroupEgress:
+        - CidrIp: '0.0.0.0/0'
+          FromPort: 80
+          IpProtocol: tcp
+          ToPort: 50000
+      SecurityGroupIngress:
+        - CidrIp: !Ref VpcCidr
+          FromPort: !Ref JenkinsWebPort
+          IpProtocol: tcp
+          ToPort: !Ref JenkinsWebPort
+        - FromPort: !Ref JnlpPort
+          IpProtocol: tcp
+          SourceSecurityGroupId: !Ref JenkinsAgentSecurityGroup
+          ToPort: !Ref JnlpPort
+      VpcId: !Ref VpcId
 
   LoadBalancerListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
@@ -169,6 +341,16 @@ Resources:
               - !Ref Host
       ListenerArn: !Ref LoadBalancerListenerArn
       Priority: !Ref ListenerPriority
+
+  Route53RecordSet:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref Route53HostedZone
+      Name: !Ref Host
+      ResourceRecords:
+        - !Ref LoadBalancerDnsName
+      TTL: 300
+      Type: CNAME
 
   TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
