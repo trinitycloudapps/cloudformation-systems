@@ -167,7 +167,10 @@ Resources:
           Image: jenkins/jenkins:lts
           PortMappings:
             - ContainerPort: !Ref JenkinsWebPort
-            - ContainerPort: !Ref JnlpPort
+            - !If
+              - HasAgents
+              - ContainerPort: !Ref JnlpPort
+              - !Ref 'AWS::NoValue'
           MountPoints:
             - SourceVolume: jenkins-home
               ContainerPath: /var/jenkins_home
