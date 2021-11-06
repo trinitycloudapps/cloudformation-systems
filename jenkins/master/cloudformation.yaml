@@ -109,7 +109,7 @@ Resources:
   EcsCluster:
     Type: AWS::ECS::Cluster
     Properties:
-      ClusterName: ${Name}-${Stage}-${Sequence}-ecs-cluster
+      ClusterName: !Sub ${Name}-${Stage}-${Sequence}-ecs-cluster
 
   EcsExecutionRole:
     Type: AWS::IAM::Role
