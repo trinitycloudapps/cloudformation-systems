@@ -83,6 +83,27 @@ Conditions:
 
 Resources:
 
+  AgentSecurityGroup:
+    Condition: HasAgents
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Jenkins agents
+      GroupName: !Sub ${Name}-${Stage}-${Sequence}-agent-security-group
+      SecurityGroupEgress:
+        - CidrIp: '0.0.0.0/0'
+          IpProtocol: '-1'
+      VpcId: !Ref VpcId
+
+  AgentToMasterSecurityGroupIngress:
+    Condition: HasAgents
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      FromPort: !Ref JnlpPort
+      GroupId: !Ref MasterSecurityGroup
+      IpProtocol: tcp
+      SourceSecurityGroupId: !Ref AgentSecurityGroup
+      ToPort: !Ref JnlpPort
+
   CloudwatchLogsGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -372,5 +393,24 @@ Resources:
 
 Outputs:
 
+  AgentSecurityGroup:
+    Condition: HasAgents
+    Value: !Ref AgentSecurityGroup
+
+  CloudWatchLogGroup:
+    Value: !Ref CloudwatchLogsGroup
+
+  EcsClusterArn:
+    Value: !GetAtt EcsCluster.Arn
+
+  EcsClusterName:
+    Value: !Ref EcsCluster
+
+  EcsExecutionRoleArn:
+    Value: !GetAtt EcsExecutionRole.Arn
+
   SecurityGroup:
     Value: !Ref MasterSecurityGroup
+
+  TunnelThrough:
+    Value: !Sub ${DiscoveryService.Name}.${DnsNamespace}:${JnlpPort}
