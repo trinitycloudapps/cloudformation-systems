@@ -74,6 +74,13 @@ Parameters:
 
 Resources:
 
+  AgentSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Jenkins agents
+      GroupName: !Sub ${Name}-${Stage}-${Sequence}-agent-security-group
+      VpcId: !Ref VpcId
+
   CloudwatchLogsGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -301,12 +308,19 @@ Resources:
           ToPort: 2049
       VpcId: !Ref VpcId
 
-#  AgentSecurityGroup:
-#    Type: AWS::EC2::SecurityGroup
-#    Properties:
-#      GroupDescription: Security group for Jenkins agents
-#      GroupName: !Sub ${Name}-${Stage}-${Sequence}-agent-security-group
-#      VpcId: !Ref VpcId
+  LoadBalancerListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - TargetGroupArn: !Ref TargetGroup
+          Type: forward
+      Conditions:
+        - Field: host-header
+          HostHeaderConfig:
+            Values:
+              - !Ref Host
+      ListenerArn: !Ref LoadBalancerListenerArn
+      Priority: !Ref ListenerPriority
 
   MasterSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -323,23 +337,9 @@ Resources:
           ToPort: !Ref JenkinsWebPort
         - FromPort: !Ref JnlpPort
           IpProtocol: tcp
-          SourceSecurityGroupId: !Ref JenkinsAgentSecurityGroup
+          SourceSecurityGroupId: !Ref AgentSecurityGroup
           ToPort: !Ref JnlpPort
       VpcId: !Ref VpcId
-
-  LoadBalancerListenerRule:
-    Type: AWS::ElasticLoadBalancingV2::ListenerRule
-    Properties:
-      Actions:
-        - TargetGroupArn: !Ref TargetGroup
-          Type: forward
-      Conditions:
-        - Field: host-header
-          HostHeaderConfig:
-            Values:
-              - !Ref Host
-      ListenerArn: !Ref LoadBalancerListenerArn
-      Priority: !Ref ListenerPriority
 
   Route53RecordSet:
     Type: AWS::Route53::RecordSet
