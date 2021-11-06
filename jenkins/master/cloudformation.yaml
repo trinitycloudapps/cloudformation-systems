@@ -409,6 +409,9 @@ Outputs:
   EcsExecutionRoleArn:
     Value: !GetAtt EcsExecutionRole.Arn
 
+  JenkinsCloud:
+    Value: !Sub ${Name}-${Stage}-${Sequence}
+
   SecurityGroup:
     Value: !Ref MasterSecurityGroup
 
