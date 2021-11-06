@@ -353,4 +353,7 @@ Resources:
         - Key: deregistration_delay.timeout_seconds
           Value: 10
 
-#Outputs:
+Outputs:
+
+  SecurityGroup:
+    Value: !Ref MasterSecurityGroup

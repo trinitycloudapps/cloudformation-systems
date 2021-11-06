@@ -16,6 +16,9 @@ Parameters:
     Default: 50000
     Type: String
 
+  MasterSecurityGroup:
+    Type: AWS::EC2::SecurityGroup::Id
+
   Memory:
     AllowedValues:
       - 512
@@ -60,5 +63,14 @@ Resources:
       GroupDescription: Security group for Jenkins agents
       GroupName: !Sub ${Name}-${Stage}-${Sequence}-agent-security-group
       VpcId: !Ref VpcId
+
+  AgentToMasterSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      FromPort: !Ref JnlpPort
+      GroupId: !Ref MasterSecurityGroup
+      IpProtocol: tcp
+      SourceSecurityGroupId: !Ref AgentSecurityGroup
+      ToPort: !Ref JnlpPort
 
 #Outputs:
