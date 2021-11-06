@@ -62,6 +62,9 @@ Resources:
     Properties:
       GroupDescription: Security group for Jenkins agents
       GroupName: !Sub ${Name}-${Stage}-${Sequence}-agent-security-group
+      SecurityGroupEgress:
+        - CidrIp: '0.0.0.0/0'
+          IpProtocol: '-1'
       VpcId: !Ref VpcId
 
   AgentToMasterSecurityGroupIngress:
