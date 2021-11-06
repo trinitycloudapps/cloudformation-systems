@@ -152,8 +152,11 @@ Resources:
             - !GetAtt MasterSecurityGroup.GroupId
       PlatformVersion: 1.4.0
       ServiceRegistries:
-        - RegistryArn: !GetAtt DiscoveryService.Arn
-          Port: !Ref JnlpPort
+        - !If
+          - HasAgents
+          - RegistryArn: !GetAtt DiscoveryService.Arn
+            Port: !Ref JnlpPort
+          - !Ref 'AWS::NoValue'
       TaskDefinition: !Ref EcsTaskDefinition
 
   EcsTaskDefinition:
