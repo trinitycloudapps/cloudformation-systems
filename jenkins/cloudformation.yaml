@@ -12,6 +12,13 @@ Parameters:
     Default: 512
     Type: String
 
+  HasAgents:
+    AllowedValues:
+      - true
+      - false
+    Default: true
+    Type: String
+
   Host:
     Type: String
 
@@ -70,17 +77,41 @@ Parameters:
 
 #Mappings:
 
-#Conditions:
+Conditions:
+
+  HasAgents: !Equals [ !Ref HasAgents, true ]
 
 Resources:
+
+  AgentSecurityGroup:
+    Condition: HasAgents
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Jenkins agents
+      GroupName: !Sub ${Name}-${Stage}-${Sequence}-agent-security-group
+      SecurityGroupEgress:
+        - CidrIp: '0.0.0.0/0'
+          IpProtocol: '-1'
+      VpcId: !Ref VpcId
+
+  AgentToMasterSecurityGroupIngress:
+    Condition: HasAgents
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      FromPort: !Ref JnlpPort
+      GroupId: !Ref MasterSecurityGroup
+      IpProtocol: tcp
+      SourceSecurityGroupId: !Ref AgentSecurityGroup
+      ToPort: !Ref JnlpPort
 
   CloudwatchLogsGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Join ['-', [ECSLogGroup, !Ref 'AWS::StackName']]
+      LogGroupName: !Sub systems/${Name}/master/${Stage}/${Sequence}
       RetentionInDays: 14
 
   DiscoveryService:
+    Condition: HasAgents
     Type: AWS::ServiceDiscovery::Service
     Properties:
       DnsConfig:
@@ -90,10 +121,11 @@ Resources:
             Type: A
           - TTL: 60
             Type: SRV
-      Name: !Sub jenkins-${Stage}-${Sequence}-discovery-service
+      Name: !Sub ${Name}-${Stage}-${Sequence}-discovery-service
       NamespaceId: !Ref DnsNamespace
 
   DnsNamespace:
+    Condition: HasAgents
     Type: AWS::ServiceDiscovery::PrivateDnsNamespace
     Properties:
       Name: !Ref AWS::StackName
@@ -102,12 +134,12 @@ Resources:
   EcsCluster:
     Type: AWS::ECS::Cluster
     Properties:
-      ClusterName: jenkins-cluster
+      ClusterName: !Sub ${Name}-${Stage}-${Sequence}-ecs-cluster
 
   EcsExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub jenkins-${Stage}-${Sequence}-execution-role
+      RoleName: !Sub ${Name}-${AWS::Region}-${Stage}-${Sequence}-execution-role
       Path: /
       AssumeRolePolicyDocument:
         Statement:
@@ -130,30 +162,36 @@ Resources:
       HealthCheckGracePeriodSeconds: 300
       LaunchType: FARGATE
       LoadBalancers:
-        - ContainerName: jenkins
-          ContainerPort: 8080
+        - ContainerName: !Ref Name
+          ContainerPort: !Ref JenkinsWebPort
           TargetGroupArn: !Ref TargetGroup
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED
           Subnets: !Ref PrivateSubnetList
           SecurityGroups:
-            - !GetAtt JenkinsSecurityGroup.GroupId
+            - !GetAtt MasterSecurityGroup.GroupId
       PlatformVersion: 1.4.0
       ServiceRegistries:
-        - RegistryArn: !GetAtt DiscoveryService.Arn
-          Port: !Ref JnlpPort
+        - !If
+          - HasAgents
+          - RegistryArn: !GetAtt DiscoveryService.Arn
+            Port: !Ref JnlpPort
+          - !Ref 'AWS::NoValue'
       TaskDefinition: !Ref EcsTaskDefinition
 
   EcsTaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
       ContainerDefinitions:
-        - Name: jenkins
+        - Name: !Ref Name
           Image: jenkins/jenkins:lts
           PortMappings:
-            - ContainerPort: 8080
-            - ContainerPort: !Ref JnlpPort
+            - ContainerPort: !Ref JenkinsWebPort
+            - !If
+              - HasAgents
+              - ContainerPort: !Ref JnlpPort
+              - !Ref 'AWS::NoValue'
           MountPoints:
             - SourceVolume: jenkins-home
               ContainerPath: /var/jenkins_home
@@ -165,7 +203,7 @@ Resources:
               awslogs-stream-prefix: jenkins
       Cpu: !Ref Cpu
       ExecutionRoleArn: !Ref EcsExecutionRole
-      Family: !Sub jenkins-task
+      Family: !Sub ${Name}-${Stage}-${Sequence}-jenkins-master
       Memory: !Ref Memory
       NetworkMode: awsvpc
       RequiresCompatibilities:
@@ -184,7 +222,7 @@ Resources:
   EcsTaskRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub jenkins-${Stage}-${Sequence}-role
+      RoleName: !Sub ${Name}-${AWS::Region}-${Stage}-${Sequence}-role
       Path: /
       AssumeRolePolicyDocument:
         Statement:
@@ -271,7 +309,7 @@ Resources:
       Encrypted: true
       FileSystemTags:
         - Key: Name
-          Value: jenkins-home
+          Value: !Sub ${Name}-${Stage}-${Sequence}-efs-filesystem
 
   EfsMountTarget1:
     Type: AWS::EFS::MountTarget
@@ -292,40 +330,13 @@ Resources:
   EfsSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      VpcId: !Ref VpcId
       GroupDescription: Jenkins Efs
+      GroupName: !Sub ${Name}-${Stage}-${Sequence}-efs-security-group
       SecurityGroupIngress:
         - CidrIp: !Ref VpcCidr
           IpProtocol: tcp
           FromPort: 2049
           ToPort: 2049
-
-  JenkinsAgentSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupName: !Sub jenkins-${Stage}-${Sequence}-agent-security-group
-      GroupDescription: Security group for Jenkins agents
-      VpcId: !Ref VpcId
-
-  JenkinsSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupName: !Sub jenkins-${Stage}-${Sequence}-mastersecurity-group
-      GroupDescription: Security group for Jenkins
-      SecurityGroupEgress:
-        - CidrIp: '0.0.0.0/0'
-          FromPort: 80
-          IpProtocol: tcp
-          ToPort: 50000
-      SecurityGroupIngress:
-        - CidrIp: !Ref VpcCidr
-          FromPort: !Ref JenkinsWebPort
-          IpProtocol: tcp
-          ToPort: !Ref JenkinsWebPort
-        - FromPort: !Ref JnlpPort
-          IpProtocol: tcp
-          SourceSecurityGroupId: !Ref JenkinsAgentSecurityGroup
-          ToPort: !Ref JnlpPort
       VpcId: !Ref VpcId
 
   LoadBalancerListenerRule:
@@ -342,6 +353,21 @@ Resources:
       ListenerArn: !Ref LoadBalancerListenerArn
       Priority: !Ref ListenerPriority
 
+  MasterSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${Name}-${Stage}-${Sequence}-master-security-group
+      GroupDescription: Security group for Jenkins Master
+      SecurityGroupEgress:
+        - CidrIp: '0.0.0.0/0'
+          IpProtocol: '-1'
+      SecurityGroupIngress:
+        - CidrIp: !Ref VpcCidr
+          FromPort: !Ref JenkinsWebPort
+          IpProtocol: tcp
+          ToPort: !Ref JenkinsWebPort
+      VpcId: !Ref VpcId
+
   Route53RecordSet:
     Type: AWS::Route53::RecordSet
     Properties:
@@ -357,7 +383,7 @@ Resources:
     Properties:
       HealthCheckPath: /login
       Name: !Sub ${Name}-${Stage}-${Sequence}-target-group
-      Port: 8080
+      Port: !Ref JenkinsWebPort
       Protocol: HTTP
       TargetType: ip
       VpcId: !Ref VpcId
@@ -365,4 +391,29 @@ Resources:
         - Key: deregistration_delay.timeout_seconds
           Value: 10
 
-#Outputs:
+Outputs:
+
+  AgentSecurityGroup:
+    Condition: HasAgents
+    Value: !Ref AgentSecurityGroup
+
+  CloudWatchLogGroup:
+    Value: !Ref CloudwatchLogsGroup
+
+  EcsClusterArn:
+    Value: !GetAtt EcsCluster.Arn
+
+  EcsClusterName:
+    Value: !Ref EcsCluster
+
+  EcsExecutionRoleArn:
+    Value: !GetAtt EcsExecutionRole.Arn
+
+  JenkinsCloud:
+    Value: !Sub ${Name}-${Stage}-${Sequence}
+
+  SecurityGroup:
+    Value: !Ref MasterSecurityGroup
+
+  TunnelThrough:
+    Value: !Sub ${DiscoveryService.Name}.${DnsNamespace}:${JnlpPort}
